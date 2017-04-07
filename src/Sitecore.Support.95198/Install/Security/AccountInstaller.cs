@@ -27,12 +27,14 @@ namespace Sitecore.Support.Install.Security
         private static readonly MethodInfo TryingToInstallAdminMI = typeof(Sitecore.Install.Security.AccountInstaller).GetMethod("TryingToInstallAdmin", BindingFlags.NonPublic | BindingFlags.Instance);
         private static readonly PropertyInfo UIEventsPI = typeof(Sitecore.Install.Security.AccountInstaller).GetProperty("UIEvents", BindingFlags.NonPublic | BindingFlags.Instance);
 
-        private static bool ContextUserHasEnoughRights() =>
-            ((bool)ContextUserHasEnoughRightsMI.Invoke(null, null));
-
-        private static string GetAccountName(string key) =>
-            ((string)GetAccountNameMI.Invoke(null, new object[] { key }));
-
+        private static bool ContextUserHasEnoughRights()
+        {
+            return ((bool)ContextUserHasEnoughRightsMI.Invoke(null, null));
+        }
+        private static string GetAccountName(string key)
+        {
+            return ((string)GetAccountNameMI.Invoke(null, new object[] { key }));
+        }
         private static string GetPassword(XmlDocument xml)
         {
             XmlNodeList list = xml.SelectNodes("/user/password");
@@ -153,9 +155,11 @@ namespace Sitecore.Support.Install.Security
             }
         }
 
-        private static XmlDocument ReadXml(PackageEntry entry) =>
-            ((XmlDocument)ReadXmlMI.Invoke(null, new object[] { entry }));
-
+        private static XmlDocument ReadXml(PackageEntry entry)
+        {
+            return ((XmlDocument)ReadXmlMI.Invoke(null, new object[] { entry }));
+        }
+            
         private void SetUserProfile(User user, XmlDocument xml)
         {
             SetUserProfileMI.Invoke(this, new object[] { user, xml });
@@ -171,10 +175,18 @@ namespace Sitecore.Support.Install.Security
             SetUserRolesMI.Invoke(this, new object[] { user, xml });
         }
 
-        private bool TryingToInstallAdmin(XmlDocument xml, string userName) =>
-            ((bool)TryingToInstallAdminMI.Invoke(this, new object[] { xml, userName }));
-
-        private IAccountInstallerEvents UIEvents =>
-            ((IAccountInstallerEvents)UIEventsPI.GetGetMethod(true).Invoke(this, null));
+        private bool TryingToInstallAdmin(XmlDocument xml, string userName)
+        {
+            return ((bool)TryingToInstallAdminMI.Invoke(this, new object[] { xml, userName }));
+        }
+            
+        private IAccountInstallerEvents UIEvents
+        {
+            get
+            {
+                return ((IAccountInstallerEvents)UIEventsPI.GetGetMethod(true).Invoke(this, null));
+            }
+        }
+            
     }
 }

@@ -141,7 +141,7 @@ namespace Sitecore.Support.Shell.Applications.Install.Dialogs.InstallPackage
             this.Monitor = (JobMonitor)obj2.GetType().GetMethod("Browse", BindingFlags.Public | BindingFlags.Static).Invoke(info.Invoke(null), new object[] { args, this.PackageFile });
         }
 
-        public void Cancel()
+        public new void Cancel()
         {
             if (base.Pages.IndexOf(base.Active) == (base.Pages.Count - 1))
             {
@@ -220,9 +220,10 @@ namespace Sitecore.Support.Shell.Applications.Install.Dialogs.InstallPackage
             return context;
         }
 
-        private static string GetFullDescription(Exception e) =>
-            e.ToString();
-
+        private static string GetFullDescription(Exception e)
+        {
+            return e.ToString();
+        }
         private static string GetShortDescription(Exception e)
         {
             string message = e.Message;
@@ -501,8 +502,10 @@ namespace Sitecore.Support.Shell.Applications.Install.Dialogs.InstallPackage
 
         private bool Cancelling
         {
-            get =>
-                MainUtil.GetBool(Context.ClientPage.ServerProperties["__cancelling"], false);
+            get
+            {
+                return MainUtil.GetBool(Context.ClientPage.ServerProperties["__cancelling"], false);
+            }  
             set
             {
                 Context.ClientPage.ServerProperties["__cancelling"] = value;
@@ -511,8 +514,10 @@ namespace Sitecore.Support.Shell.Applications.Install.Dialogs.InstallPackage
 
         private InstallationSteps CurrentStep
         {
-            get =>
-                ((InstallationSteps)((int)base.ServerProperties["installationStep"]));
+            get
+            {
+                return ((InstallationSteps)((int)base.ServerProperties["installationStep"]));
+            }  
             set
             {
                 lock (this.CurrentStepSync)
@@ -524,8 +529,10 @@ namespace Sitecore.Support.Shell.Applications.Install.Dialogs.InstallPackage
 
         public bool HasLicense
         {
-            get =>
-                MainUtil.GetBool(Context.ClientPage.ServerProperties["HasLicense"], false);
+            get
+            {
+                return MainUtil.GetBool(Context.ClientPage.ServerProperties["HasLicense"], false);
+            } 
             set
             {
                 Context.ClientPage.ServerProperties["HasLicense"] = value.ToString();
@@ -534,8 +541,10 @@ namespace Sitecore.Support.Shell.Applications.Install.Dialogs.InstallPackage
 
         public bool HasReadme
         {
-            get =>
-                MainUtil.GetBool(Context.ClientPage.ServerProperties["Readme"], false);
+            get
+            {
+                return MainUtil.GetBool(Context.ClientPage.ServerProperties["Readme"], false);
+            }   
             set
             {
                 Context.ClientPage.ServerProperties["Readme"] = value.ToString();
@@ -544,8 +553,10 @@ namespace Sitecore.Support.Shell.Applications.Install.Dialogs.InstallPackage
 
         private string MainInstallationTaskID
         {
-            get =>
-                StringUtil.GetString(base.ServerProperties["taskID"]);
+            get
+            {
+                return StringUtil.GetString(base.ServerProperties["taskID"]);
+            }  
             set
             {
                 base.ServerProperties["taskID"] = value;
@@ -554,8 +565,10 @@ namespace Sitecore.Support.Shell.Applications.Install.Dialogs.InstallPackage
 
         private string OriginalNextButtonHeader
         {
-            get =>
-                StringUtil.GetString(Context.ClientPage.ServerProperties["next-header"]);
+            get
+            {
+                return StringUtil.GetString(Context.ClientPage.ServerProperties["next-header"]);
+            }
             set
             {
                 Context.ClientPage.ServerProperties["next-header"] = value;
@@ -564,8 +577,10 @@ namespace Sitecore.Support.Shell.Applications.Install.Dialogs.InstallPackage
 
         private int PackageVersion
         {
-            get =>
-                int.Parse(StringUtil.GetString(base.ServerProperties["packageType"], "1"));
+            get
+            {
+                return int.Parse(StringUtil.GetString(base.ServerProperties["packageType"], "1"));
+            }  
             set
             {
                 base.ServerProperties["packageType"] = value;
@@ -574,8 +589,10 @@ namespace Sitecore.Support.Shell.Applications.Install.Dialogs.InstallPackage
 
         private string PostAction
         {
-            get =>
-                StringUtil.GetString(base.ServerProperties["postAction"]);
+            get
+            {
+                return StringUtil.GetString(base.ServerProperties["postAction"]);
+            }
             set
             {
                 base.ServerProperties["postAction"] = value;
