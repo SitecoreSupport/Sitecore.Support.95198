@@ -1,538 +1,66 @@
-﻿using Sitecore;
+﻿using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using Sitecore.Data;
-using Sitecore.Data.Engines;
-using Sitecore.Data.Proxies;
-using Sitecore.Diagnostics;
 using Sitecore.Events;
-using Sitecore.Globalization;
-using Sitecore.Install;
 using Sitecore.Install.Events;
-using Sitecore.Install.Files;
-using Sitecore.Install.Framework;
-using Sitecore.Install.Items;
-using Sitecore.Install.Metadata;
-using Sitecore.Install.Security;
-using Sitecore.Install.Utils;
-using Sitecore.Install.Zip;
-using Sitecore.IO;
+using System;
+using System.IO;
 using Sitecore.Jobs;
 using Sitecore.Jobs.AsyncUI;
-using Sitecore.SecurityModel;
-using Sitecore.Shell.Applications.Install.Dialogs.InstallPackage;
-using Sitecore.Shell.Framework;
-using Sitecore.Support.Install;
+using Sitecore.Diagnostics;
+using Sitecore.Globalization;
+using Sitecore.Install;
+using Sitecore.Install.Files;
+using Sitecore.Install.Framework;
+using Sitecore.Install.Metadata;
+using Sitecore.Install.Zip;
+using Sitecore.IO;
 using Sitecore.Web;
 using Sitecore.Web.UI.HtmlControls;
 using Sitecore.Web.UI.Pages;
 using Sitecore.Web.UI.Sheer;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Reflection;
+using Sitecore.Shell.Framework;
+using Sitecore.Install.Utils;
 using System.Threading;
+using Sitecore.Install.Security;
+using Sitecore.Install.Items;
+using Sitecore.Configuration;
+using Sitecore.Data.Engines;
 
 namespace Sitecore.Support.Shell.Applications.Install.Dialogs.InstallPackage
 {
     public class InstallPackageForm : WizardForm
     {
-        protected Border AbortMessage;
-        protected Radiobutton Accept;
-        protected Edit Author;
-        private readonly object CurrentStepSync = new object();
-        protected Radiobutton Decline;
-        protected Literal ErrorDescription;
-        protected Border ErrorMessage;
-        protected Literal FailingReason;
-        protected Border LicenseAgreement;
-        protected JobMonitor Monitor;
+        #region controls
+
         protected Edit PackageFile;
         protected Edit PackageName;
+        protected Edit Version;
+        protected Edit Author;
         protected Edit Publisher;
+        protected Border LicenseAgreement;
         protected Memo ReadmeText;
+        protected Radiobutton Decline;
+        protected Radiobutton Accept;
         protected Checkbox Restart;
         protected Checkbox RestartServer;
+        protected JobMonitor Monitor;
+        protected Literal FailingReason;
+        protected Literal ErrorDescription;
         protected Border SuccessMessage;
-        protected Edit Version;
+        protected Border ErrorMessage;
+        protected Border AbortMessage;
 
-        protected override void ActivePageChanged(string page, string oldPage)
-        {
-            base.ActivePageChanged(page, oldPage);
-            base.NextButton.Header = this.OriginalNextButtonHeader;
-            if ((page == "License") && (oldPage == "LoadPackage"))
-            {
-                base.NextButton.Disabled = !this.Accept.Checked;
-            }
-            if (page == "Installing")
-            {
-                base.BackButton.Disabled = true;
-                base.NextButton.Disabled = true;
-                base.CancelButton.Disabled = true;
-                Context.ClientPage.SendMessage(this, "installer:startInstallation");
-            }
-            if (page == "Ready")
-            {
-                base.NextButton.Header = Translate.Text("Install");
-            }
-            if (page == "LastPage")
-            {
-                base.BackButton.Disabled = true;
-            }
-            if (!this.Successful)
-            {
-                base.CancelButton.Header = Translate.Text("Close");
-                this.Successful = true;
-            }
-        }
+        #endregion controls
 
-        protected override bool ActivePageChanging(string page, ref string newpage)
-        {
-            bool flag = base.ActivePageChanging(page, ref newpage);
-            if ((page == "LoadPackage") && (newpage == "License"))
-            {
-                flag = this.LoadPackage();
-                if (!this.HasLicense)
-                {
-                    newpage = "Readme";
-                    if (!this.HasReadme)
-                    {
-                        newpage = "Ready";
-                    }
-                }
-                return flag;
-            }
-            if ((page == "License") && (newpage == "Readme"))
-            {
-                if (!this.HasReadme)
-                {
-                    newpage = "Ready";
-                }
-                return flag;
-            }
-            if ((page == "Ready") && (newpage == "Readme"))
-            {
-                if (!this.HasReadme)
-                {
-                    newpage = "License";
-                    if (!this.HasLicense)
-                    {
-                        newpage = "LoadPackage";
-                    }
-                }
-                return flag;
-            }
-            if (((page == "Readme") && (newpage == "License")) && !this.HasLicense)
-            {
-                newpage = "LoadPackage";
-            }
-            return flag;
-        }
-
-        protected void Agree()
-        {
-            base.NextButton.Disabled = false;
-            Context.ClientPage.ClientResponse.SetReturnValue(true);
-        }
-
-        [HandleMessage("installer:browse", true)]
-        protected void Browse(ClientPipelineArgs args)
-        {
-            ConstructorInfo info = Assembly.GetAssembly(typeof(Sitecore.Shell.Applications.Install.Dialogs.InstallPackage.InstallPackageForm)).GetType("Sitecore.Shell.Applications.Install.Dialogs.DialogUtils").GetConstructor(BindingFlags.Public | BindingFlags.Instance, null, CallingConventions.Any, new Type[0], null);
-            object obj2 = info.Invoke(null);
-            this.Monitor = (JobMonitor)obj2.GetType().GetMethod("Browse", BindingFlags.Public | BindingFlags.Static).Invoke(info.Invoke(null), new object[] { args, this.PackageFile });
-        }
-
-        public new void Cancel()
-        {
-            if (base.Pages.IndexOf(base.Active) == (base.Pages.Count - 1))
-            {
-                this.EndWizard();
-            }
-            else
-            {
-                this.Cancelling = true;
-                Context.ClientPage.Start(this, "Confirmation");
-            }
-        }
-
-        protected void CopyErrorMessage()
-        {
-            Context.ClientPage.ClientResponse.Eval("window.clipboardData.setData('Text', scForm.browser.getControl('ErrorDescription').innerHTML)");
-        }
-
-        protected void CopyLicense()
-        {
-            Context.ClientPage.ClientResponse.Eval("window.clipboardData.setData('Text', scForm.browser.getControl('LicenseAgreement').innerHTML)");
-        }
-
-        protected void CopyReadme()
-        {
-            Context.ClientPage.ClientResponse.Eval("window.clipboardData.setData('Text', scForm.browser.getControl('ReadmeText').value)");
-        }
-
-        protected void Disagree()
-        {
-            base.NextButton.Disabled = true;
-            Context.ClientPage.ClientResponse.SetReturnValue(true);
-        }
-
-        protected void Done()
-        {
-            base.Active = "LastPage";
-            base.BackButton.Disabled = true;
-            base.NextButton.Disabled = true;
-            base.CancelButton.Disabled = false;
-        }
-
-        [HandleMessage("installer:doPostAction")]
-        protected void DoPostAction(Message msg)
-        {
-            if (!string.IsNullOrEmpty(this.PostAction))
-            {
-                this.StartPostAction();
-            }
-        }
-
-        protected override void EndWizard()
-        {
-            if (!this.Cancelling)
-            {
-                if (this.RestartServer.Checked)
-                {
-                    Sitecore.Install.Installer.RestartServer();
-                }
-                if (this.Restart.Checked)
-                {
-                    Context.ClientPage.ClientResponse.Broadcast(Context.ClientPage.ClientResponse.SetLocation(string.Empty), "Shell");
-                }
-            }
-            Sitecore.Shell.Framework.Windows.Close();
-        }
-
-        private IProcessingContext GetContextWithMetadata()
-        {
-            string filename = Sitecore.Install.Installer.GetFilename(this.PackageFile.Value);
-            IProcessingContext context = Sitecore.Install.Installer.CreatePreviewContext();
-            ISource<PackageEntry> source = new PackageReader(MainUtil.MapPath(filename));
-            MetadataView view = new MetadataView(context);
-            MetadataSink sink = new MetadataSink(view);
-            sink.Initialize(context);
-            source.Populate(sink);
-            return context;
-        }
-
-        private static string GetFullDescription(Exception e)
-        {
-            return e.ToString();
-        }
-        private static string GetShortDescription(Exception e)
-        {
-            string message = e.Message;
-            int index = message.IndexOf("(method:", StringComparison.InvariantCulture);
-            if (index > -1)
-            {
-                return message.Substring(0, index - 1);
-            }
-            return message;
-        }
-
-        private void GotoLastPage(Result result, string shortDescription, string fullDescription)
-        {
-            this.ErrorDescription.Text = fullDescription;
-            this.FailingReason.Text = shortDescription;
-            this.Cancelling = result != Result.Success;
-            SetVisibility(this.SuccessMessage, result == Result.Success);
-            SetVisibility(this.ErrorMessage, result == Result.Failure);
-            SetVisibility(this.AbortMessage, result == Result.Abort);
-            InstallationEventArgs args = new InstallationEventArgs(new List<ItemUri>(), new List<FileCopyInfo>(), "packageinstall:ended");
-            Event.RaiseEvent("packageinstall:ended", new object[] { args });
-            this.Successful = result == Result.Success;
-            base.Active = "LastPage";
-        }
-
-        private bool LoadPackage()
-        {
-            string path = this.PackageFile.Value;
-            if (Path.GetExtension(path).Trim().Length == 0)
-            {
-                path = Path.ChangeExtension(path, ".zip");
-                this.PackageFile.Value = path;
-            }
-            if (path.Trim().Length == 0)
-            {
-                Context.ClientPage.ClientResponse.Alert("Please specify a package.");
-                return false;
-            }
-            path = Sitecore.Install.Installer.GetFilename(path);
-            if (!FileUtil.FileExists(path))
-            {
-                Context.ClientPage.ClientResponse.Alert(Translate.Text("The package \"{0}\" file does not exist.", new object[] { path }));
-                return false;
-            }
-            IProcessingContext context = Sitecore.Install.Installer.CreatePreviewContext();
-            ISource<PackageEntry> source = new PackageReader(MainUtil.MapPath(path));
-            MetadataView view = new MetadataView(context);
-            MetadataSink sink = new MetadataSink(view);
-            sink.Initialize(context);
-            source.Populate(sink);
-            if ((context == null) || (context.Data == null))
-            {
-                Context.ClientPage.ClientResponse.Alert(Translate.Text("The package \"{0}\" could not be loaded.\n\nThe file maybe corrupt.", new object[] { path }));
-                return false;
-            }
-            this.PackageVersion = context.Data.ContainsKey("installer-version") ? 2 : 1;
-            this.PackageName.Value = view.PackageName;
-            this.Version.Value = view.Version;
-            this.Author.Value = view.Author;
-            this.Publisher.Value = view.Publisher;
-            this.LicenseAgreement.InnerHtml = view.License;
-            this.ReadmeText.Value = view.Readme;
-            this.HasLicense = view.License.Length > 0;
-            this.HasReadme = view.Readme.Length > 0;
-            this.PostAction = view.PostStep;
-            Registry.SetString("Packager/File", this.PackageFile.Value);
-            return true;
-        }
-
-        private void Monitor_JobDisappeared(object sender, EventArgs e)
-        {
-            Assert.ArgumentNotNull(sender, "sender");
-            Assert.ArgumentNotNull(e, "e");
-            lock (this.CurrentStepSync)
-            {
-                switch (this.CurrentStep)
-                {
-                    case InstallationSteps.MainInstallation:
-                        this.GotoLastPage(Result.Failure, Translate.Text("Installation could not be completed."), Translate.Text("Installation job was interrupted unexpectedly."));
-                        break;
-
-                    case InstallationSteps.WaitForFiles:
-                        this.WatchForInstallationStatus();
-                        break;
-
-                    default:
-                        this.Monitor_JobFinished(sender, e);
-                        break;
-                }
-            }
-        }
-
-        private void Monitor_JobFinished(object sender, EventArgs e)
-        {
-            Assert.ArgumentNotNull(sender, "sender");
-            Assert.ArgumentNotNull(e, "e");
-            lock (this.CurrentStepSync)
-            {
-                switch (this.CurrentStep)
-                {
-                    case InstallationSteps.MainInstallation:
-                        this.CurrentStep = InstallationSteps.WaitForFiles;
-                        this.WatchForInstallationStatus();
-                        goto Label_00B0;
-
-                    case InstallationSteps.WaitForFiles:
-                        this.CurrentStep = InstallationSteps.InstallSecurity;
-                        this.StartInstallingSecurity();
-                        goto Label_00B0;
-
-                    case InstallationSteps.InstallSecurity:
-                        this.CurrentStep = InstallationSteps.RunPostAction;
-                        if (!string.IsNullOrEmpty(this.PostAction))
-                        {
-                            break;
-                        }
-                        this.GotoLastPage(Result.Success, string.Empty, string.Empty);
-                        goto Label_00B0;
-
-                    case InstallationSteps.RunPostAction:
-                        this.GotoLastPage(Result.Success, string.Empty, string.Empty);
-                        goto Label_00B0;
-
-                    default:
-                        goto Label_00B0;
-                }
-                this.StartPostAction();
-                Label_00B0:;
-            }
-        }
-
-        protected override void OnCancel(object sender, EventArgs formEventArgs)
-        {
-            this.Cancel();
-        }
-
-        [HandleMessage("installer:commitingFiles")]
-        private void OnCommittingFiles(Message message)
-        {
-            Assert.ArgumentNotNull(message, "message");
-            lock (this.CurrentStepSync)
-            {
-                if (this.CurrentStep == InstallationSteps.MainInstallation)
-                {
-                    this.CurrentStep = InstallationSteps.WaitForFiles;
-                    this.WatchForInstallationStatus();
-                }
-            }
-        }
-
-        [HandleMessage("installer:aborted")]
-        protected void OnInstallerAborted(Message message)
-        {
-            this.GotoLastPage(Result.Abort, string.Empty, string.Empty);
-            this.CurrentStep = InstallationSteps.Failed;
-        }
-
-        [HandleMessage("installer:failed")]
-        protected void OnInstallerFailed(Message message)
-        {
-            Job job = JobManager.GetJob(this.Monitor.JobHandle);
-            Assert.IsNotNull(job, "Job is not available");
-            Exception result = job.Status.Result as Exception;
-            Error.AssertNotNull(result, "Cannot get any exception details");
-            this.GotoLastPage(Result.Failure, GetShortDescription(result), GetFullDescription(result));
-            this.CurrentStep = InstallationSteps.Failed;
-        }
-
-        protected override void OnLoad(EventArgs e)
-        {
-            if (!Context.ClientPage.IsEvent)
-            {
-                this.OriginalNextButtonHeader = base.NextButton.Header;
-            }
-            base.OnLoad(e);
-            ConstructorInfo info = Assembly.GetAssembly(typeof(Sitecore.Shell.Applications.Install.Dialogs.InstallPackage.InstallPackageForm)).GetType("Sitecore.Shell.Applications.Install.Dialogs.DialogUtils").GetConstructor(BindingFlags.Public | BindingFlags.Instance, null, CallingConventions.Any, new Type[0], null);
-            object obj2 = info.Invoke(null);
-            this.Monitor = (JobMonitor)obj2.GetType().GetMethod("AttachMonitor", BindingFlags.Public | BindingFlags.Static).Invoke(info.Invoke(null), new object[] { this.Monitor });
-            if (!Context.ClientPage.IsEvent)
-            {
-                this.PackageFile.Value = Registry.GetString("Packager/File");
-                this.Decline.Checked = true;
-                this.Restart.Checked = true;
-                this.RestartServer.Checked = false;
-            }
-            this.Monitor.JobFinished += new EventHandler(this.Monitor_JobFinished);
-            this.Monitor.JobDisappeared += new EventHandler(this.Monitor_JobDisappeared);
-        }
-
-        protected void RestartInstallation()
-        {
-            base.Active = "Ready";
-        }
-
-        [HandleMessage("installer:savePostAction")]
-        protected void SavePostAction(Message msg)
-        {
-            string str = msg.Arguments[0];
-            this.PostAction = str;
-        }
-
-        [HandleMessage("installer:setTaskId")]
-        private void SetTaskID(Message message)
-        {
-            Assert.ArgumentNotNull(message, "message");
-            Assert.IsNotNull(message["id"], "id");
-            this.MainInstallationTaskID = message["id"];
-        }
-
-        private static void SetVisibility(Control control, bool visible)
-        {
-            Context.ClientPage.ClientResponse.SetStyle(control.ID, "display", visible ? "" : "none");
-        }
-
-        [HandleMessage("installer:startInstallation")]
-        protected void StartInstallation(Message message)
-        {
-            Assert.ArgumentNotNull(message, "message");
-            this.CurrentStep = InstallationSteps.MainInstallation;
-            string filename = Sitecore.Install.Installer.GetFilename(this.PackageFile.Value);
-            if (FileUtil.IsFile(filename))
-            {
-                this.StartTask(filename);
-            }
-            else
-            {
-                Context.ClientPage.ClientResponse.Alert("Package not found");
-                base.Active = "Ready";
-                base.BackButton.Disabled = true;
-            }
-        }
-
-        private void StartInstallingSecurity()
-        {
-            string filename = Sitecore.Install.Installer.GetFilename(this.PackageFile.Value);
-            this.Monitor.Start("InstallSecurity", "Install", new ThreadStart(new AsyncHelper(filename).InstallSecurity));
-        }
-
-        private void StartPostAction()
-        {
-            if (this.Monitor.JobHandle != Handle.Null)
-            {
-                Log.Info("Waiting for installation task completion", this);
-                SheerResponse.Timer("installer:doPostAction", 100);
-            }
-            else
-            {
-                string postAction = this.PostAction;
-                this.PostAction = string.Empty;
-                if ((postAction.IndexOf("://", StringComparison.InvariantCulture) < 0) && postAction.StartsWith("/", StringComparison.InvariantCulture))
-                {
-                    postAction = WebUtil.GetServerUrl() + postAction;
-                }
-                this.Monitor.Start("RunPostAction", "Install", new ThreadStart(new AsyncHelper(postAction, this.GetContextWithMetadata()).ExecutePostStep));
-            }
-        }
-
-        private void StartTask(string packageFile)
-        {
-            this.Monitor.Start("Install", "Install", new ThreadStart(new AsyncHelper(packageFile).Install));
-        }
-
-        [HandleMessage("installer:upload", true)]
-        protected void Upload(ClientPipelineArgs args)
-        {
-            ConstructorInfo info = Assembly.GetAssembly(typeof(Sitecore.Shell.Applications.Install.Dialogs.InstallPackage.InstallPackageForm)).GetType("Sitecore.Shell.Applications.Install.Dialogs.DialogUtils").GetConstructor(BindingFlags.Public | BindingFlags.Instance, null, CallingConventions.Any, new Type[0], null);
-            object obj2 = info.Invoke(null);
-            this.Monitor = (JobMonitor)obj2.GetType().GetMethod("Upload", BindingFlags.Public | BindingFlags.Static).Invoke(info.Invoke(null), new object[] { args, this.PackageFile });
-        }
-
-        private void WatchForInstallationStatus()
-        {
-            string statusFileName = FileInstaller.GetStatusFileName(this.MainInstallationTaskID);
-            this.Monitor.Start("WatchStatus", "Install", new ThreadStart(new AsyncHelper().SetStatusFile(statusFileName).WatchForStatus));
-        }
-
-        private bool Cancelling
-        {
-            get
-            {
-                return MainUtil.GetBool(Context.ClientPage.ServerProperties["__cancelling"], false);
-            }  
-            set
-            {
-                Context.ClientPage.ServerProperties["__cancelling"] = value;
-            }
-        }
-
-        private InstallationSteps CurrentStep
-        {
-            get
-            {
-                return ((InstallationSteps)((int)base.ServerProperties["installationStep"]));
-            }  
-            set
-            {
-                lock (this.CurrentStepSync)
-                {
-                    base.ServerProperties["installationStep"] = (int)value;
-                }
-            }
-        }
+        #region properties
 
         public bool HasLicense
         {
             get
             {
                 return MainUtil.GetBool(Context.ClientPage.ServerProperties["HasLicense"], false);
-            } 
+            }
             set
             {
                 Context.ClientPage.ServerProperties["HasLicense"] = value.ToString();
@@ -544,26 +72,486 @@ namespace Sitecore.Support.Shell.Applications.Install.Dialogs.InstallPackage
             get
             {
                 return MainUtil.GetBool(Context.ClientPage.ServerProperties["Readme"], false);
-            }   
+            }
             set
             {
                 Context.ClientPage.ServerProperties["Readme"] = value.ToString();
             }
         }
 
-        private string MainInstallationTaskID
+        [NotNull]
+        string PostAction
         {
             get
             {
-                return StringUtil.GetString(base.ServerProperties["taskID"]);
-            }  
+                return StringUtil.GetString(ServerProperties["postAction"]);
+            }
             set
             {
-                base.ServerProperties["taskID"] = value;
+                ServerProperties["postAction"] = value;
             }
         }
 
-        private string OriginalNextButtonHeader
+        enum InstallationSteps
+        {
+            MainInstallation,
+            WaitForFiles,
+            InstallSecurity,
+            RunPostAction,
+            None,
+            Failed
+        }
+
+        readonly object CurrentStepSync = new object();
+
+        InstallationSteps CurrentStep
+        {
+            get
+            {
+                return (InstallationSteps)(int)ServerProperties["installationStep"];
+            }
+            set
+            {
+                lock (CurrentStepSync)
+                {
+                    ServerProperties["installationStep"] = (int)value;
+                }
+            }
+        }
+
+        int PackageVersion
+        {
+            get
+            {
+                return int.Parse(StringUtil.GetString(ServerProperties["packageType"], "1"));
+            }
+            set
+            {
+                ServerProperties["packageType"] = value;
+            }
+        }
+
+        bool Successful
+        {
+            get
+            {
+                object value = ServerProperties["Successful"];
+                return value is bool ? (bool)value : true;
+            }
+            set
+            {
+                ServerProperties["Successful"] = value;
+            }
+        }
+
+        string MainInstallationTaskID
+        {
+            get
+            {
+                return StringUtil.GetString(ServerProperties["taskID"]);
+            }
+            set
+            {
+                ServerProperties["taskID"] = value;
+            }
+        }
+
+
+        #endregion properties
+
+        #region overrides
+
+        protected override void OnLoad(EventArgs e)
+        {
+            if (!Context.ClientPage.IsEvent)
+            {
+                OriginalNextButtonHeader = NextButton.Header;
+            }
+            base.OnLoad(e);
+            Monitor = DialogUtils.AttachMonitor(Monitor);
+            if (!Context.ClientPage.IsEvent)
+            {
+                PackageFile.Value = Registry.GetString("Packager/File");
+                Decline.Checked = true;
+                Restart.Checked = true;
+                RestartServer.Checked = false;
+            }
+            Monitor.JobFinished += Monitor_JobFinished;
+            Monitor.JobDisappeared += Monitor_JobDisappeared;
+
+            this.WizardCloseConfirmationText = Texts.AreYouSureYouWantToCancelInstallingAPackage;
+        }
+
+        protected override bool ActivePageChanging(string page, ref string newpage)
+        {
+            bool changingResult = base.ActivePageChanging(page, ref newpage);
+            if ((page == "LoadPackage") && (newpage == "License"))
+            {
+                changingResult = LoadPackage();
+                if (!HasLicense)
+                {
+                    newpage = "Readme";
+                    if (!HasReadme)
+                    {
+                        newpage = "Ready";
+                    }
+                }
+                return changingResult;
+            }
+            if ((page == "License") && (newpage == "Readme"))
+            {
+                if (!HasReadme)
+                {
+                    newpage = "Ready";
+                }
+                return changingResult;
+            }
+            if ((page == "Ready") && (newpage == "Readme"))
+            {
+                if (!HasReadme)
+                {
+                    newpage = "License";
+                    if (!HasLicense)
+                    {
+                        newpage = "LoadPackage";
+                    }
+                }
+                return changingResult;
+            }
+            if (((page == "Readme") && (newpage == "License")) && !HasLicense)
+            {
+                newpage = "LoadPackage";
+            }
+
+            return changingResult;
+        }
+
+        protected override void ActivePageChanged(string page, string oldPage)
+        {
+            base.ActivePageChanged(page, oldPage);
+
+            NextButton.Header = OriginalNextButtonHeader;
+
+            if ((page == "License") && (oldPage == "LoadPackage"))
+            {
+                NextButton.Disabled = !Accept.Checked;
+            }
+            if (page == "Installing")
+            {
+                BackButton.Disabled = true;
+                NextButton.Disabled = true;
+                CancelButton.Disabled = true;
+                Context.ClientPage.SendMessage(this, "installer:startInstallation");
+            }
+            if (page == "Ready")
+            {
+                NextButton.Header = Translate.Text("Install");
+            }
+            if (page == "LastPage")
+            {
+                BackButton.Disabled = true;
+            }
+
+            if (!Successful)
+            {
+                CancelButton.Header = Translate.Text("Close");
+                Successful = true;
+            }
+        }
+
+        protected override void EndWizard()
+        {
+            if (!Cancelling)
+            {
+                if (RestartServer.Checked)
+                {
+                    Installer.RestartServer();
+                }
+                if (Restart.Checked)
+                {
+                    Context.ClientPage.ClientResponse.Broadcast(Context.ClientPage.ClientResponse.SetLocation(string.Empty), "Shell");
+                }
+            }
+
+            Windows.Close();
+        }
+
+        protected override void OnCancel(object sender, EventArgs formEventArgs)
+        {
+            Cancel();
+        }
+
+        public new void Cancel()
+        {
+            int index = Pages.IndexOf(Active);
+
+            if (index == 0 || index == Pages.Count - 1)
+            {
+                Cancelling = index == 0;
+                EndWizard();
+            }
+            else
+            {
+                Cancelling = true;
+                Context.ClientPage.Start(this, "Confirmation");
+            }
+        }
+
+        #endregion overrides
+
+        #region message handlers
+
+        protected void Done()
+        {
+            Active = "LastPage";
+            BackButton.Disabled = true;
+            NextButton.Disabled = true;
+            CancelButton.Disabled = false;
+        }
+
+        [HandleMessage("installer:startInstallation")]
+        protected void StartInstallation([NotNull] Message message)
+        {
+            Assert.ArgumentNotNull(message, "message");
+
+            CurrentStep = InstallationSteps.MainInstallation;
+            string packageFile = Installer.GetFilename(PackageFile.Value);
+            if (FileUtil.IsFile(packageFile))
+            {
+                StartTask(packageFile);
+            }
+            else
+            {
+                Context.ClientPage.ClientResponse.Alert("Package not found");
+                Active = "Ready";
+                BackButton.Disabled = true;
+            }
+        }
+
+        [HandleMessage("installer:setTaskId")]
+        [UsedImplicitly]
+        [SuppressMessage("Microsoft.Performance", "CA1811:AvoidUncalledPrivateCode", Justification = "The member is used implicitly.")]
+        private void SetTaskID([NotNull] Message message)
+        {
+            Assert.ArgumentNotNull(message, "message");
+
+            Assert.IsNotNull(message["id"], "id");
+            MainInstallationTaskID = message["id"];
+        }
+
+        [HandleMessage("installer:commitingFiles")]
+        [UsedImplicitly]
+        [SuppressMessage("Microsoft.Performance", "CA1811:AvoidUncalledPrivateCode", Justification = "The member is used implicitly.")]
+        private void OnCommittingFiles([NotNull] Message message)
+        {
+            Assert.ArgumentNotNull(message, "message");
+
+            lock (CurrentStepSync)
+            {
+                if (CurrentStep == InstallationSteps.MainInstallation)
+                {
+                    CurrentStep = InstallationSteps.WaitForFiles;
+                    WatchForInstallationStatus();
+                }
+            }
+        }
+
+        void Monitor_JobFinished([NotNull] object sender, [NotNull] EventArgs e)
+        {
+            Assert.ArgumentNotNull(sender, "sender");
+            Assert.ArgumentNotNull(e, "e");
+
+            lock (CurrentStepSync)
+            {
+                switch (CurrentStep)
+                {
+                    case InstallationSteps.MainInstallation:
+                        CurrentStep = InstallationSteps.WaitForFiles;
+                        WatchForInstallationStatus();
+                        break;
+
+                    case InstallationSteps.WaitForFiles:
+                        CurrentStep = InstallationSteps.InstallSecurity;
+                        StartInstallingSecurity();
+                        break;
+
+                    case InstallationSteps.InstallSecurity:
+                        CurrentStep = InstallationSteps.RunPostAction;
+                        if (string.IsNullOrEmpty(PostAction))
+                        {
+                            GotoLastPage(Result.Success, string.Empty, string.Empty);
+                        }
+                        else
+                        {
+                            StartPostAction();
+                        }
+                        break;
+
+                    case InstallationSteps.RunPostAction:
+                        GotoLastPage(Result.Success, string.Empty, string.Empty);
+                        break;
+                }
+            }
+        }
+
+        void Monitor_JobDisappeared([NotNull] object sender, [NotNull] EventArgs e)
+        {
+            Assert.ArgumentNotNull(sender, "sender");
+            Assert.ArgumentNotNull(e, "e");
+
+            lock (CurrentStepSync)
+            {
+                switch (CurrentStep)
+                {
+                    case InstallationSteps.MainInstallation:
+                        GotoLastPage(Result.Failure, Translate.Text(Texts.INSTALLATION_COULD_NOT_BE_COMPLETED),
+                                     Translate.Text(Texts.INSTALLATION_JOB_WAS_INTERRUPTED_UNEXPECTEDLY));
+                        break;
+
+                    case InstallationSteps.WaitForFiles:
+                        WatchForInstallationStatus();
+                        break;
+
+                    default:
+                        Monitor_JobFinished(sender, e);
+                        break;
+                }
+            }
+        }
+
+        [HandleMessage("installer:browse", true)]
+        protected void Browse(ClientPipelineArgs args)
+        {
+            DialogUtils.Browse(args, PackageFile);
+        }
+
+        [HandleMessage("installer:upload", true)]
+        protected void Upload(ClientPipelineArgs args)
+        {
+            DialogUtils.Upload(args, PackageFile);
+        }
+
+        [HandleMessage("installer:savePostAction")]
+        protected void SavePostAction(Message msg)
+        {
+            string action = msg.Arguments[0];
+            PostAction = action;
+        }
+
+        [HandleMessage("installer:doPostAction")]
+        protected void DoPostAction(Message msg)
+        {
+            string action = PostAction;
+            if (!string.IsNullOrEmpty(action))
+            {
+                StartPostAction();
+            }
+        }
+
+        [HandleMessage("installer:aborted")]
+        protected void OnInstallerAborted(Message message)
+        {
+            GotoLastPage(Result.Abort, string.Empty, string.Empty);
+            CurrentStep = InstallationSteps.Failed;
+        }
+
+        [HandleMessage("installer:failed")]
+        protected void OnInstallerFailed(Message message)
+        {
+            Job job = JobManager.GetJob(Monitor.JobHandle);
+            Assert.IsNotNull(job, "Job is not available");
+
+            var e = job.Status.Result as Exception;
+            Error.AssertNotNull(e, "Cannot get any exception details");
+
+            GotoLastPage(Result.Failure, GetShortDescription(e), GetFullDescription(e));
+            CurrentStep = InstallationSteps.Failed;
+        }
+
+        enum Result
+        {
+            Success,
+            Failure,
+            Abort
+        }
+
+        void GotoLastPage(Result result, string shortDescription, string fullDescription)
+        {
+            ErrorDescription.Text = fullDescription;
+            FailingReason.Text = shortDescription;
+
+
+            Cancelling = result != Result.Success;
+
+            SetVisibility(SuccessMessage, result == Result.Success);
+            SetVisibility(ErrorMessage, result == Result.Failure);
+            SetVisibility(AbortMessage, result == Result.Abort);
+            var installationArgs = new InstallationEventArgs(new List<ItemUri>(), new List<FileCopyInfo>(), "packageinstall:ended");
+            Event.RaiseEvent("packageinstall:ended", installationArgs);
+            Successful = result == Result.Success;
+            Active = "LastPage";
+        }
+
+        bool Cancelling
+        {
+            get
+            {
+                return MainUtil.GetBool(Context.ClientPage.ServerProperties["__cancelling"], false);
+            }
+            set
+            {
+                Context.ClientPage.ServerProperties["__cancelling"] = value;
+            }
+        }
+
+        protected void Agree()
+        {
+            NextButton.Disabled = false;
+            Context.ClientPage.ClientResponse.SetReturnValue(true);
+        }
+
+        protected void Disagree()
+        {
+            NextButton.Disabled = true;
+            Context.ClientPage.ClientResponse.SetReturnValue(true);
+        }
+
+        protected void RestartInstallation()
+        {
+            Active = "Ready";
+            CancelButton.Visible = true;
+            CancelButton.Disabled = false;
+            NextButton.Visible = true;
+            NextButton.Disabled = false;
+            BackButton.Visible = false;
+        }
+
+        #endregion message handlers
+
+        #region private scope
+
+        static string GetFullDescription(Exception e)
+        {
+            return e.ToString();
+        }
+
+        static string GetShortDescription(Exception e)
+        {
+            string message = e.Message;
+            int pos = message.IndexOf("(method:", StringComparison.InvariantCulture);
+            if (pos > -1)
+            {
+                return message.Substring(0, pos - 1);
+            }
+            return message;
+        }
+
+        static void SetVisibility(Control control, bool visible)
+        {
+            Context.ClientPage.ClientResponse.SetStyle(control.ID, "display", visible ? "" : "none");
+        }
+
+        string OriginalNextButtonHeader
         {
             get
             {
@@ -575,71 +563,230 @@ namespace Sitecore.Support.Shell.Applications.Install.Dialogs.InstallPackage
             }
         }
 
-        private int PackageVersion
+        bool LoadPackage()
         {
-            get
+            string packageFile = PackageFile.Value;
+            if (Path.GetExtension(packageFile).Trim().Length == 0)
             {
-                return int.Parse(StringUtil.GetString(base.ServerProperties["packageType"], "1"));
-            }  
-            set
-            {
-                base.ServerProperties["packageType"] = value;
+                packageFile = Path.ChangeExtension(packageFile, ".zip");
+                PackageFile.Value = packageFile;
             }
+            if (packageFile.Trim().Length == 0)
+            {
+                Context.ClientPage.ClientResponse.Alert("Please specify a package.");
+                return false;
+            }
+            packageFile = Installer.GetFilename(packageFile);
+            if (!FileUtil.FileExists(packageFile))
+            {
+                Context.ClientPage.ClientResponse.Alert(Translate.Text("The package \"{0}\" file does not exist.", new object[] { packageFile }));
+                return false;
+            }
+
+            IProcessingContext context = Installer.CreatePreviewContext();
+            ISource<PackageEntry> reader = new PackageReader(MainUtil.MapPath(packageFile));
+            MetadataView view = new MetadataView(context);
+            MetadataSink metaSink = new MetadataSink(view);
+            metaSink.Initialize(context);
+
+            reader.Populate(metaSink);
+            if ((context == null) || (context.Data == null))
+            {
+                Context.ClientPage.ClientResponse.Alert(Translate.Text("The package \"{0}\" could not be loaded.\n\nThe file maybe corrupt.", new object[] { packageFile }));
+                return false;
+            }
+
+            PackageVersion = context.Data.ContainsKey("installer-version") ? 2 : 1;  // Do we need this line?
+            PackageName.Value = view.PackageName;
+            Version.Value = view.Version;
+            Author.Value = view.Author;
+            Publisher.Value = view.Publisher;
+            LicenseAgreement.InnerHtml = view.License;
+            ReadmeText.Value = view.Readme;
+            HasLicense = view.License.Length > 0;
+            HasReadme = view.Readme.Length > 0;
+            PostAction = view.PostStep;
+            Registry.SetString("Packager/File", PackageFile.Value);
+            return true;
         }
 
-        private string PostAction
+        #region task helpers
+
+        void StartTask(string packageFile)
         {
-            get
-            {
-                return StringUtil.GetString(base.ServerProperties["postAction"]);
-            }
-            set
-            {
-                base.ServerProperties["postAction"] = value;
-            }
+            Monitor.Start("Install", "Install", new AsyncHelper(packageFile).Install);
         }
 
-        private bool Successful
+
+        void WatchForInstallationStatus()
         {
-            get
-            {
-                object obj2 = base.ServerProperties["Successful"];
-                if (obj2 is bool)
-                {
-                    return (bool)obj2;
-                }
-                return true;
-            }
-            set
-            {
-                base.ServerProperties["Successful"] = value;
-            }
+            string fileName = FileInstaller.GetStatusFileName(MainInstallationTaskID);
+            Monitor.Start("WatchStatus", "Install", new AsyncHelper().SetStatusFile(fileName).WatchForStatus);
         }
+
+        void StartInstallingSecurity()
+        {
+            var packageFile = Installer.GetFilename(PackageFile.Value);
+            Monitor.Start("InstallSecurity", "Install", new AsyncHelper(packageFile).InstallSecurity);
+        }
+
+        void StartPostAction()
+        {
+            if (Monitor.JobHandle != Handle.Null)
+            {
+                Log.Info("Waiting for installation task completion", this);
+                SheerResponse.Timer("installer:doPostAction", 100);
+                return;
+            }
+            string postAction = PostAction;
+            PostAction = string.Empty;
+            if ((postAction.IndexOf("://", StringComparison.InvariantCulture) < 0) && (postAction.StartsWith("/", StringComparison.InvariantCulture)))
+            {
+                postAction = WebUtil.GetServerUrl() + postAction;
+            }
+            Monitor.Start("RunPostAction", "Install", new AsyncHelper(postAction, GetContextWithMetadata()).ExecutePostStep);
+        }
+
+        IProcessingContext GetContextWithMetadata()
+        {
+            string packageFile = Installer.GetFilename(PackageFile.Value);
+            IProcessingContext context = Installer.CreatePreviewContext();
+            ISource<PackageEntry> reader = new PackageReader(MainUtil.MapPath(packageFile));
+            MetadataView view = new MetadataView(context);
+            MetadataSink metaSink = new MetadataSink(view);
+            metaSink.Initialize(context);
+            reader.Populate(metaSink);
+            return context;
+        }
+
+        #endregion task helpers
+
+        #endregion private scope
+
+        #region nested class
 
         private class AsyncHelper
         {
-            private IProcessingContext _context;
-            private Language _language;
-            private string _packageFile;
-            private string _postAction;
-            private StatusFile _statusFile;
+            #region variables
 
-            public AsyncHelper()
-            {
-                this._language = Context.Language;
-            }
+            string _packageFile;
+            string _postAction;
+            IProcessingContext _context;
+            StatusFile _statusFile;
+            private Language _language;
+
+            #endregion variables
 
             public AsyncHelper(string package)
             {
-                this._packageFile = package;
-                this._language = Context.Language;
+                _packageFile = package;
+                _language = Context.Language;
             }
 
             public AsyncHelper(string postAction, IProcessingContext context)
             {
-                this._postAction = postAction;
-                this._context = context;
-                this._language = Context.Language;
+                _postAction = postAction;
+                _context = context;
+                _language = Context.Language;
+            }
+
+            public AsyncHelper()
+            {
+                _language = Context.Language;
+            }
+
+            public void Install()
+            {
+                CatchExceptions(delegate {
+                    using (new SecurityModel.SecurityDisabler())
+                    {
+                        using (new SyncOperationContext())
+                        {
+                            using (new LanguageSwitcher(_language))
+                            {
+                                using (var drive = new VirtualDrive(FileUtil.MapPath(Settings.TempFolderPath)))
+                                {
+                                    SettingsSwitcher settingsSwitcher = null;
+                                    try
+                                    {
+                                        if (!string.IsNullOrEmpty(drive.Name))
+                                        {
+                                            settingsSwitcher = new SettingsSwitcher("TempFolder", drive.Name);
+                                        }
+
+                                        var processingContext = Installer.CreateInstallationContext();
+                                        JobContext.PostMessage("installer:setTaskId(id=" + processingContext.TaskID + ")");
+                                        processingContext.AddAspect<IItemInstallerEvents>(new UiInstallerEvents());
+                                        processingContext.AddAspect<IFileInstallerEvents>(new UiInstallerEvents());
+                                        var installer = new Installer();
+                                        installer.InstallPackage(PathUtils.MapPath(_packageFile), processingContext);
+                                    }
+                                    finally
+                                    {
+                                        if (settingsSwitcher != null)
+                                        {
+                                            settingsSwitcher.Dispose();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            public void InstallSecurity()
+            {
+                CatchExceptions(delegate {
+                    using (new LanguageSwitcher(_language))
+                    {
+                        var processingContext = Installer.CreateInstallationContext();
+                        processingContext.AddAspect<IAccountInstallerEvents>(new UiInstallerEvents());
+                        var installer = new Support.Install.Installer();
+                        installer.InstallSecurity(PathUtils.MapPath(_packageFile), processingContext);
+                    }
+                });
+            }
+
+            public AsyncHelper SetStatusFile(string filename)
+            {
+                _statusFile = new StatusFile(filename);
+                return this;
+            }
+
+            public void WatchForStatus()
+            {
+                CatchExceptions(delegate {
+                    Assert.IsNotNull(_statusFile, "Internal error: status file not set.");
+                    bool ok = false;
+                    do
+                    {
+                        StatusFile.StatusInfo info = _statusFile.ReadStatus();
+                        if (info == null)
+                        {
+                            continue;
+                        }
+                        switch (info.Status)
+                        {
+                            case StatusFile.Status.Finished:
+                                ok = true;
+                                break;
+                            case StatusFile.Status.Failed:
+                                throw new Exception("Background process failed: " + info.Exception.Message, info.Exception);
+                        }
+                        Thread.Sleep(100);
+                    }
+                    while (!ok);
+
+                });
+            }
+
+            public void ExecutePostStep()
+            {
+                CatchExceptions(delegate {
+                    var installer = new Installer();
+                    installer.ExecutePostStep(_postAction, _context);
+                });
             }
 
             private void CatchExceptions(ThreadStart start)
@@ -658,105 +805,16 @@ namespace Sitecore.Support.Shell.Applications.Install.Dialogs.InstallPackage
                     JobContext.PostMessage("installer:aborted");
                     JobContext.Flush();
                 }
-                catch (Exception exception)
+                catch (Exception e)
                 {
-                    Log.Error("Installation failed: " + exception, this);
-                    JobContext.Job.Status.Result = exception;
+                    Log.Error("Installation failed: " + e, this);
+                    JobContext.Job.Status.Result = e;
                     JobContext.PostMessage("installer:failed");
                     JobContext.Flush();
                 }
             }
-
-            public void ExecutePostStep()
-            {
-                this.CatchExceptions(() => new Sitecore.Support.Install.Installer().ExecutePostStep(this._postAction, this._context));
-            }
-
-            public void Install()
-            {
-                this.CatchExceptions(delegate {
-                    using (new SecurityDisabler())
-                    {
-                        using (new ProxyDisabler())
-                        {
-                            using (new SyncOperationContext())
-                            {
-                                using (new LanguageSwitcher(this._language))
-                                {
-                                    IProcessingContext context = Sitecore.Install.Installer.CreateInstallationContext();
-                                    JobContext.PostMessage("installer:setTaskId(id=" + context.TaskID + ")");
-                                    ConstructorInfo info = Assembly.GetAssembly(typeof(Sitecore.Shell.Applications.Install.Dialogs.InstallPackage.InstallPackageForm)).GetType("Sitecore.Shell.Applications.Install.Dialogs.InstallPackage.UiInstallerEvents").GetConstructor(BindingFlags.Public | BindingFlags.Instance, null, CallingConventions.Any, new Type[0], null);
-                                    context.AddAspect<IItemInstallerEvents>((IItemInstallerEvents)info.Invoke(null));
-                                    context.AddAspect<IFileInstallerEvents>((IFileInstallerEvents)info.Invoke(null));
-                                    new Sitecore.Support.Install.Installer().InstallPackage(PathUtils.MapPath(this._packageFile), context);
-                                }
-                            }
-                        }
-                    }
-                });
-            }
-
-            public void InstallSecurity()
-            {
-                this.CatchExceptions(delegate {
-                    using (new LanguageSwitcher(this._language))
-                    {
-                        IProcessingContext context = Sitecore.Install.Installer.CreateInstallationContext();
-                        ConstructorInfo info = Assembly.GetAssembly(typeof(Sitecore.Shell.Applications.Install.Dialogs.InstallPackage.InstallPackageForm)).GetType("Sitecore.Shell.Applications.Install.Dialogs.InstallPackage.UiInstallerEvents").GetConstructor(BindingFlags.Public | BindingFlags.Instance, null, CallingConventions.Any, new Type[0], null);
-                        context.AddAspect<IAccountInstallerEvents>((IAccountInstallerEvents)info.Invoke(null));
-                        new Sitecore.Support.Install.Installer().InstallSecurity(PathUtils.MapPath(this._packageFile), context);
-                    }
-                });
-            }
-
-            public Sitecore.Support.Shell.Applications.Install.Dialogs.InstallPackage.InstallPackageForm.AsyncHelper SetStatusFile(string filename)
-            {
-                this._statusFile = new StatusFile(filename);
-                return this;
-            }
-
-            public void WatchForStatus()
-            {
-                this.CatchExceptions(delegate {
-                    Assert.IsNotNull(this._statusFile, "Internal error: status file not set.");
-                    bool flag = false;
-                    do
-                    {
-                        StatusFile.StatusInfo info = this._statusFile.ReadStatus();
-                        if (info != null)
-                        {
-                            switch (info.Status)
-                            {
-                                case StatusFile.Status.Finished:
-                                    flag = true;
-                                    break;
-
-                                case StatusFile.Status.Failed:
-                                    throw new Exception("Background process failed: " + info.Exception.Message, info.Exception);
-                            }
-                            Thread.Sleep(100);
-                        }
-                    }
-                    while (!flag);
-                });
-            }
         }
 
-        private enum InstallationSteps
-        {
-            MainInstallation,
-            WaitForFiles,
-            InstallSecurity,
-            RunPostAction,
-            None,
-            Failed
-        }
-
-        private enum Result
-        {
-            Success,
-            Failure,
-            Abort
-        }
+        #endregion
     }
 }

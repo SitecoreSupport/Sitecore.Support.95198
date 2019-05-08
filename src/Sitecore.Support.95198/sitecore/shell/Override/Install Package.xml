@@ -25,7 +25,7 @@
       }
 
     </Stylesheet>
-	<WizardForm Application="Tools/Installer/InstallationWizard" CodeBeside="Sitecore.Support.Shell.Applications.Install.Dialogs.InstallPackage.InstallPackageForm,Sitecore.Support.95198">
+    <WizardForm Application="Tools/Installer/InstallationWizard" CodeBeside="Sitecore.Support.Shell.Applications.Install.Dialogs.InstallPackage.InstallPackageForm,Sitecore.Support.95198">
 
       <WizardFormPage ID="LoadPackage" Header="Install a Package" Text="Select a package to install.">
         <WizardFormPadding>
